@@ -7,12 +7,21 @@ import (
 	"net"
 	"os"
 	"path"
+	"path/filepath"
+	"ssh-forwarding/internal/logging"
 	"ssh-forwarding/internal/util"
 	"strconv"
 )
 
+var Configuration *Config
+
 type Config struct {
 	SshServers []SshServer `yaml:"ssh_servers"`
+	Logging    Logging     `yaml:"logging"`
+}
+
+type Logging struct {
+	Level logging.LoggerLevel `yaml:"level"`
 }
 
 type SshServer struct {
@@ -54,7 +63,21 @@ type Mapping struct {
 	Listener  net.Listener
 }
 
-func FromYaml(file string) (*Config, error) {
+func Load() (string, error) {
+	file, err := searchConfigYaml()
+	if err != nil {
+		return "", err
+	}
+	p, _ := filepath.Abs(file)
+	Configuration, err = fromYaml(file)
+	if err != nil {
+		return p, err
+	}
+
+	return p, nil
+}
+
+func fromYaml(file string) (*Config, error) {
 	conf := &Config{}
 	bytes, err := os.ReadFile(file)
 	if err != nil {
@@ -64,7 +87,7 @@ func FromYaml(file string) (*Config, error) {
 	return conf, err
 }
 
-func SearchConfigYaml() (string, error) {
+func searchConfigYaml() (string, error) {
 	// 当前执行目录
 	var dirs = []string{""}
 	// 程序所在目录
