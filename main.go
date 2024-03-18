@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"path/filepath"
-	"ssh-forwarding/internal"
 	"ssh-forwarding/internal/config"
+	"ssh-forwarding/internal/forwarding"
 	"ssh-forwarding/internal/logging"
 	"sync"
 )
@@ -22,36 +22,21 @@ func main() {
 	}
 	p, _ := filepath.Abs(confFile)
 	logger.Info(fmt.Sprintf("Load config file [%s] success", p))
-	connected := make([]internal.SshServer, 0)
+	var wg sync.WaitGroup
 	for _, server := range conf.SshServers {
-		err := server.Connect()
-		if err != nil {
-			logger.Error("Connect to ssh server [%-21s] failed, err = %v", server.GetAddr(), err)
-			continue
-		}
-		logger.Info("Connect to ssh server [%-21s] success", server.GetAddr())
-		connected = append(connected, server)
-	}
-	if len(connected) > 0 {
-		var wg sync.WaitGroup
-		wg.Add(1)
-		for _, c := range connected {
-			for _, forwarding := range c.Forwardings {
-				if len(forwarding.LocalHost) == 0 {
-					forwarding.LocalHost = "0.0.0.0"
-				}
-				server := c
-				f := forwarding
-				go func(forwarding internal.Forwarding) {
-					err := forwarding.ListenLocal(server)
-					if err != nil {
-						logger.Info("[%-25s] Listen local address [%-13s] failed, err = %v", forwarding.Label, forwarding.GetLocalAddr(), err)
-					}
-				}(f)
+		for _, f := range server.Forwardings {
+			wg.Add(1)
+			if len(f.LocalHost) == 0 {
+				f.LocalHost = "0.0.0.0"
 			}
+			holder := config.ForwardingHolder{}
+			go func(server config.SshServer, f config.Forwarding) {
+				if err := forwarding.ListenLocal(server, f, &holder); err != nil {
+					logger.Info("[%-25s] Listen local address [%-13s] failed, err = %v", f.Label, f.GetLocalAddr(), err)
+					wg.Done()
+				}
+			}(server, f)
 		}
-		wg.Wait()
-	} else {
-		logger.Info("No effective forwarding config found")
 	}
+	wg.Wait()
 }

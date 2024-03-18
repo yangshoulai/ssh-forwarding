@@ -2,15 +2,56 @@ package config
 
 import (
 	"errors"
+	"golang.org/x/crypto/ssh"
 	"gopkg.in/yaml.v3"
+	"net"
 	"os"
 	"path"
-	"ssh-forwarding/internal"
 	"ssh-forwarding/internal/util"
+	"strconv"
 )
 
 type Config struct {
-	SshServers []internal.SshServer `yaml:"ssh_servers"`
+	SshServers []SshServer `yaml:"ssh_servers"`
+}
+
+type SshServer struct {
+	Host        string       `yaml:"host"`
+	Port        int          `yaml:"port"`
+	Username    string       `yaml:"username"`
+	Password    string       `yaml:"password"`
+	Forwardings []Forwarding `yaml:"forwardings"`
+}
+
+func (server *SshServer) GetAddr() string {
+	return server.Host + ":" + strconv.Itoa(server.Port)
+}
+
+type Forwarding struct {
+	Label      string `yaml:"label"`
+	LocalHost  string `yaml:"local_host"`
+	LocalPort  int    `yaml:"local_port"`
+	RemoteHost string `yaml:"remote_host"`
+	RemotePort int    `yaml:"remote_port"`
+}
+
+func (forwarding *Forwarding) GetLocalAddr() string {
+	return forwarding.LocalHost + ":" + strconv.Itoa(forwarding.LocalPort)
+}
+func (forwarding *Forwarding) GetRemoteAddr() string {
+	return forwarding.RemoteHost + ":" + strconv.Itoa(forwarding.RemotePort)
+}
+
+type ForwardingHolder struct {
+	LocalListener *net.Listener
+	Mappings      []*Mapping
+}
+
+type Mapping struct {
+	Local     net.Conn
+	Remote    net.Conn
+	SshClient *ssh.Client
+	Listener  net.Listener
 }
 
 func FromYaml(file string) (*Config, error) {
